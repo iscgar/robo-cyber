@@ -618,6 +618,8 @@ static bool HandleUpperRequest(__attribute__((unused)) const connection_t *conne
 	{
 		perror("Error writing file");
 
+		close(fd);
+
 		return false;
 	}
 
