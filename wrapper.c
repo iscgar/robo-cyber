@@ -592,7 +592,7 @@ static bool HandleUpperRequest(__attribute__((unused)) const connection_t *conne
 	GET_FROM_BUFFER(payload, fileSize);
 
 	/* NULL Terminate the path just in case */
-	path[CMD_LEN] = '\0';
+	path[pathSize] = '\0';
 
 	/* Filter the path. No directory traversals. */
 	if (find_pta(path, strnlen(path, CMD_LEN)))
