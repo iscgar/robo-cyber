@@ -1096,7 +1096,7 @@ int main(int argc, char **argv)
 	if (!getuid())
 		setuid(1000);
 
-	pinMode(BLUE_PIN, OUTPUT);
+	pinMode(GREEN_PIN, OUTPUT);
 	pinMode(ORANGE_PIN, OUTPUT);
 	pinMode(RED_PIN, OUTPUT);
 
