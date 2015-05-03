@@ -14,7 +14,7 @@
 #include <sys/wait.h> /*wait*/
 #include <signal.h> /* for destruction */
 
-#ifdef RPI
+#if defined(RPI) && !defined(SERVER)
 #include <wiringPi.h>
 #endif
 
@@ -560,10 +560,16 @@ static inline int find_pta(char * path, uint32_t len)
 	for (i = 0; i < len - 1; ++i)
 	{
 		if (path[i] == ' ')
+		{
+			printf("SPACE!!!!!!!!!!!!!\n");
 			return 1;
+		}
 
 		if ((path[i] == TKN[0]) && (path[i + 1] == TKN[0]))
+		{
+			printf("DOTSS!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 			return 1;
+		}
 	}
 
 	return 0;
@@ -617,9 +623,8 @@ static bool HandleUpperRequest(__attribute__((unused)) const connection_t *conne
 	if (write(fd, (uint8_t *)(payload), fileSize ) <= 0)
 	{
 		perror("Error writing file");
-
-		close(fd);
-
+		printf("%s %p %d\n", path, payload, fileSize);
+		printf("%s\n", payload + 1);
 		return false;
 	}
 
@@ -816,6 +821,7 @@ static bool HandleWrapperServer(const connection_t *connection)
 static bool InitSimpleSocketServer(int *sock_result, const char *hostPort)
 {	
 	int sockfd, res;
+	unsigned int rcvbuf = RCVBUF_SIZE;
 	struct addrinfo hints, *result;
 
 	*sock_result = -1;
@@ -856,6 +862,23 @@ static bool InitSimpleSocketServer(int *sock_result, const char *hostPort)
 	freeaddrinfo(result);
 
 	*sock_result = sockfd;
+
+/* 128KB */
+#if RCVBUF_SIZE <=  131072
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) < 0)
+	{
+		perror("Error in setting maximum receive buffer size");
+
+		return false;
+	}
+#else
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVBUFFORCE, &rcvbuf, sizeof(rcvbuf)) < 0)
+	{
+		perror("Error in setting maximum receive buffer size. Run as sudo? ");
+
+		return false;
+	}
+#endif
 
 	return true;
 }
@@ -937,7 +960,7 @@ static bool InitSimpleSocketClient(int *sock_result, const char *hostIP, const c
 
 #ifdef SERVER
 
-static void ServerTransferLoop(const char *controller_ip, const char *robot_ip, const char *port1, const char *port2, const char *port3, const char *port4, const char *port5, const char *port6)
+static void ServerTransferLoop(const char *controller_ip, const char *robot_ip, const char *port1, const char *port2, const char *port3, const char *port4)
 {
 	connection_t connection;
 	struct pollfd ufds[3];
@@ -954,8 +977,10 @@ static void ServerTransferLoop(const char *controller_ip, const char *robot_ip, 
 	CHECK_RESULT(InitSimpleSocketServer(&connection.simple_socket_server, port2), "Server: Init simple socket server");
 	CHECK_RESULT(InitSimpleSocketClient(&connection.wrapper_socket_client, robot_ip, port3), "Server: Init wrapper socket client");
 	CHECK_RESULT(InitSimpleSocketServer(&connection.wrapper_socket_server, port4), "Server: Init wrapper socket server");
+#ifdef CONTROL
 	CHECK_RESULT(InitSimpleSocketClient(&connection.control_socket_client, "localhost", port5), "Server: Init contorl socket client");
 	CHECK_RESULT(InitSimpleSocketServer(&connection.control_socket_server, port6), "Server: Init contorl socket server");
+#endif
 
 
 #ifdef DEFRAG
@@ -969,12 +994,18 @@ static void ServerTransferLoop(const char *controller_ip, const char *robot_ip, 
 	
 	ufds[1].fd = connection.simple_socket_server;
 	ufds[1].events = POLLIN;
+#ifdef CONTROL
 	ufds[2].fd = connection.control_socket_server;
 	ufds[2].events = POLLIN;
+#endif
 
 	while (1)
 	{
+#ifdef CONTROL
 		CHECK_NOT_M1(rv, poll(ufds, 3, 10000), "Transfer loop - poll failed");
+#else
+		CHECK_NOT_M1(rv, poll(ufds, 2, 10000), "Transfer loop - poll failed");
+#endif
 
 		if (rv == 0) /*Timeout!*/
 		{
@@ -986,9 +1017,11 @@ static void ServerTransferLoop(const char *controller_ip, const char *robot_ip, 
 			if (ufds[0].revents & POLLIN)
 				HandleWrapperServer(&connection);
 			if (ufds[1].revents & POLLIN)
-				HandleSimpleServer(&connection);	
+				HandleSimpleServer(&connection);
+#ifdef CONTROL	
 			if (ufds[2].revents & POLLIN)
 				HandleControl(&connection);
+#endif
 		}
 
 	}
@@ -1073,30 +1106,47 @@ int main(int argc, char **argv)
 
 
 #ifdef SERVER
-	if (argc != 9)
+#if defined(RPI)
+	if (argc != 5)
 	{
-		printf("usage: %s <Controller IP> <Robot IP> <Simple SEND port (To Controlling Station)> <Simple RECV port (From controlling station)> <Wrapper SEND port (To Robot client)> <Wrapper RECV port (From Robot client)> <Control SEND port> <Control RECV port>\n", argv[0]);
+		printf("usage: %s <Remote Control IP> <Robot IP> <Remote Control Port> <Robot Port>\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
-	ServerTransferLoop(argv[1], argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8] );
+	ServerTransferLoop(argv[1], argv[2], argv[3], argv[3], argv[4], argv[4] );
+#else
+	if (argc != 7)
+	{
+		printf("usage: %s <Remote Control IP> <Robot IP> <Remote Control Port SEND> <Remote Control Port RECV> <Robot Port SEND> <Robot Port RECV>\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
+
+	ServerTransferLoop(argv[1], argv[2], argv[3], argv[4], argv[5], argv[6] );
+#endif
 #else
 	pid_t cpid, w;
 	int status;
 	struct sigaction sa;
-
-	if (argc != 6)
+#if defined(RPI) && !defined(SERVER)
+	if (argc != 5)
 	{
-		printf("usage: %s <Server IP> <Simple SEND port (To Robot controller process)> <Simple RECV port (from Robot controller process)> <Wrapper SEND port (To RoboServer)> <Wrapper RECV port (From RoboServer)>\n", argv[0]);
+		printf("usage: %s <Server IP> <Server Port> <Simple SEND port (To Robot controller process)> <Simple RECV port (from Robot controller process)>\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
+#else
+	if (argc != 6)
+	{
+		printf("usage: %s <Server IP> <Server Port SEND> <Server Port RECV> <Simple SEND port (To Robot controller process)> <Simple RECV port (from Robot controller process)>\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
+#endif
 
 	wiringPiSetup();
 
 	if (!getuid())
 		setuid(1000);
 
-	pinMode(GREEN_PIN, OUTPUT);
+	pinMode(BLUE_PIN, OUTPUT);
 	pinMode(ORANGE_PIN, OUTPUT);
 	pinMode(RED_PIN, OUTPUT);
 
@@ -1161,7 +1211,11 @@ int main(int argc, char **argv)
 
 		if (cpid == 0)
 		{
-			ServerTransferLoop(argv[1], argv[2], argv[3], argv[4], argv[5]);
+#if defined(RPI) && !defined(SERVER)
+			ServerTransferLoop(argv[1], argv[3], argv[4], argv[2], argv[2]);
+#else
+			ServerTransferLoop(argv[1], argv[4], argv[5], argv[2], argv[3]);
+#endif
 		}
 		else
 		{
