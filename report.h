@@ -1,18 +1,13 @@
 #ifndef __REPORT_H__
 #define __REPORT_H__
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <stdbool.h>
 #include <stdint.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 
-void ReportBug(char * ip, uint16_t port, const char * func_name);
+#define REPORT() reporter_report(__FUNCTION__)
 
-#define REPORT(ip, port) ReportBug((ip), (port), __FUNCTION__)
+extern bool reporter_init(const char *server_addr, uint16_t port);
+extern void reporter_report(const char *func_name);
+extern void reporter_cleanup(void);
 
 #endif

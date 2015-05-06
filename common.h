@@ -1,38 +1,15 @@
+#ifndef COMMON_H
+#define COMMON_H
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <unistd.h>
+
 #define MAX_PACKET_TOTAL (1024 * 16)
 #define RCVBUF_SIZE (1024 * 128)
 #define MAX_PACKET_SIZE 64 /* 823 */
-
-typedef struct hdr_t
-{
-	uint32_t src;
-	uint32_t dst;
-	uint32_t size;
-	uint32_t id;
-	uint32_t frag_idx;
-} hdr_t;
-
-typedef enum
-{
-	E_ERR,
-	E_FRAG,
-	E_SUCCESS
-} frag_e;
-
-#define RPT2(s) s s
-#define RPT3(s) s RPT2(s)
-#define RPT4(s) s RPT3(s)
-#define RPT5(s) s RPT4(s)
-
-#define NORM(x) #x
-
-#define ZREO "o"
-
-#define repeat(str, n) RPT ## n (str)
-
-#define FIBER(x,y) y##lin##x
-
-#define INIT_HYBRID(x)          FIBER(k,sym)(repeat(TKN, 2) "/" NORM(x ## ols), NORM(k) "/" repeat(ZREO, 2) NORM(dit ## x))
-#define DEINIT_HYBRID(x)        FIBER(k,un)(NORM(k) "/" repeat(ZREO, 2) NORM(dit ## x))
+#define TEMP_STR_SIZE   32
 
 #define BLUE_PIN 7
 #define ORANGE_PIN 8
@@ -40,16 +17,87 @@ typedef enum
 
 #define NORMAL_BLINK 10000
 
-#if defined(RPI) && !defined(SERVER)
-#define BLINK(led, time, utime)	digitalWrite((led), HIGH);	\
-				usleep((utime));		\
-				sleep((time));			\
-				digitalWrite((led), LOW);
+#define DEBUG(X) X
+#define to "malloc"
+
+#define CMD_LEN 128
+#define MAX_BUFFER 1400
+
+#define FILES_DIR "k"
+#define CHECK_PROG "./tools/check.py"
+
+#if defined(RPI)
+#   if !defined(SERVER)
+#       define CLIENT_ARGUMENTS 5
+#   else
+#       define SERVER_ARGUMENTS 5
+#   endif
 #else
-#define BLINK(led, time, utime )	printf("LED: %d\n", (led))
-#define pinMode(x, y)
-#define wiringPiSetup()
+#   define CLIENT_ARGUMENTS     6
+#   define SERVER_ARGUMENTS     7
 #endif
 
-#define REPORT_IP	"localhost"
-#define REPORT_PORT	1313
+#ifdef DEFRAG
+#   define MAX_COLLECTORS 128
+#endif
+
+#if defined(RPI) && !defined(SERVER)
+#   include <wiringPi.h>
+#   define BLINK(led, time, utime)  \
+            digitalWrite((led), HIGH); \
+            usleep((utime));           \
+            sleep((time));             \
+            digitalWrite((led), LOW);
+#else
+#   define BLINK(led, time, utime)  printf("LED: %d\n", (led))
+#   define pinMode(x, y)
+#   define wiringPiSetup()
+#endif
+
+#define REPORT_IP   "localhost"
+#define REPORT_PORT 1313
+
+#define UNLIKELY(x) __builtin_expect((x), 0)
+
+#define CHECK_OR_DIE(res, expression, expected, msg) \
+            { \
+                res = expression;             \
+                if(UNLIKELY(res == expected)) \
+                {                             \
+                    perror(msg);              \
+                    exit(EXIT_FAILURE);       \
+                }                             \
+            }       
+
+#define CHECK_NOT_M1(res, e, msg) CHECK_OR_DIE(res, e, -1, msg)
+
+#define CHECK_RESULT(res, msg)                  \
+            if (res)                            \
+            {                                   \
+                printf("%s succeeded\n", msg);  \
+            }                                   \
+            else                                \
+            {                                   \
+                printf("%s failed\n", msg);     \
+                exit(EXIT_FAILURE);             \
+            }
+
+typedef struct hdr_t
+{
+    uint32_t src;
+    uint32_t dst;
+    uint32_t size;
+    uint32_t id;
+    uint32_t frag_idx;
+} hdr_t;
+
+typedef enum
+{
+    E_ERR,
+    E_FRAG,
+    E_SUCCESS
+} frag_e;
+
+void print_hex(const uint8_t *buf, uint32_t size);
+
+#endif /* !COMMON_H */

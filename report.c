@@ -1,55 +1,112 @@
-#if defined(RPI) && !defined(SERVER)
-#include <wiringPi.h>
-#endif
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "report.h"
 #include "common.h"
 
-static int create_socket(char * addr, uint16_t port)
+#define REPORTER_MAX_PKT_SIZE 1024
+
+static int reporter_sock = -1;
+
+bool reporter_init(const char *server_addr, uint16_t port)
 {
-	/* Variable definition */
-	int sockfd;
-	struct sockaddr_in bind_addr;
+    int s;
+    char port_str[6];
+    struct addrinfo hints;
+    struct addrinfo *result = NULL, *rp = NULL;
 
-	/* Code section */
-	/* Create a socket for connection testing */
-	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (!server_addr)
+    {
+        return false;
+    }
 
-	/* Reset the addr struct */
-	memset(&bind_addr, 0, sizeof(struct sockaddr_in));
+    /* Close the socket if requested to reinitialize */
+    if (reporter_sock != -1)
+    {
+        close(reporter_sock);
+        reporter_sock = -1;
+    }
 
-	/* Fill it with appropriate data */
-	bind_addr.sin_family = AF_INET;
-	bind_addr.sin_port = htons(port);
-	inet_aton(addr, &bind_addr.sin_addr);
+    sprintf(port_str, "%u", port);
+    printf("Trying to connect to bug reporter @ %s:%s\n", server_addr, port_str);
 
-	/* Bind it to a network interface */
-	if (connect(sockfd, (struct sockaddr *)&bind_addr, sizeof(struct sockaddr_in)) < 0)
-	{
-		/* Some error occured */
-		perror("Error in binding socket");
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
+    hints.ai_socktype = SOCK_DGRAM; /* Datagram socket */
+    hints.ai_flags = 0;
+    hints.ai_protocol = 0;          /* Any protocol */
 
-		return 0;
-	}
+    if ((s = getaddrinfo(server_addr, port_str, &hints, &result)) != 0)
+    {
+        fprintf(stderr, "reporter_init: getaddrinfo(): %s\n", gai_strerror(s));
+        return false;
+    }
 
-	return sockfd;
+    /* Try to connect */
+    for (rp = result; rp != NULL; rp = rp->ai_next)
+    {
+        /* Try to open socket */
+        if ((reporter_sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol)) < 0)
+        {
+            continue;
+        }
+
+        /* Try to connect */
+        if (connect(reporter_sock, rp->ai_addr, rp->ai_addrlen) != -1)
+        {
+            break;                  /* Success */
+        }
+
+       close(reporter_sock);
+    }
+
+    if (rp == NULL)
+    {
+        perror("reporter_init: connect()");
+    }
+
+    freeaddrinfo(result);           /* No longer needed */
+
+    return rp != NULL;
 }
 
-#define MAX_PKT_SIZE 1024
-
-void ReportBug(char * ip, uint16_t port, const char * func_name)
+void reporter_report(const char *func_name)
 {
-	int sock;
-	int len = strlen(func_name);
-	char pkt[MAX_PKT_SIZE];
+    static uint8_t packet_data[REPORTER_MAX_PKT_SIZE];
 
-	sock = create_socket(ip, port);
+    printf("Reporting bug in %s\n", func_name);
 
-	memcpy(pkt, &len, sizeof(len));
-	memcpy(pkt + sizeof(len), func_name, len);
+    /* Do nothing if we don't have a socket */
+    if ((reporter_sock != -1) && (func_name))
+    {
+        uint32_t len = strnlen(func_name, sizeof(packet_data) - sizeof(uint32_t));
 
-	send(sock, pkt, sizeof(len) + len, 0);
-	printf("Report sent.\n");
-	BLINK(BLUE_PIN, 1, 0);
+        memset(packet_data, 0, sizeof(packet_data));
+        memcpy(packet_data, &len, sizeof(len));
+        memcpy(packet_data + sizeof(len), func_name, len);
 
-	close(sock);
+        if (send(reporter_sock, packet_data, sizeof(len) + len, 0) < 0)
+        {
+            perror("reporter_report: send()");
+        }
+        else
+        {
+            puts("Reported!");
+            BLINK(BLUE_PIN, 1, 0);
+        }
+    }
+}
+
+void reporter_cleanup(void)
+{
+    if (reporter_sock != -1)
+    {
+        close(reporter_sock);
+        reporter_sock = -1;
+    }
 }

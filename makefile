@@ -1,11 +1,11 @@
 CC=gcc
 
 # General compiler flags
-CFLAGS=-fstack-protector-all -s -fvisibility=hidden -fPIC
-LFLAGS=-fPIE -pie -lrt
+CFLAGS=-fstack-protector-all -s -fvisibility=hidden -fPIC -ffunction-sections -fdata-sections
+LFLAGS=-fPIE -pie -lrt -Wl,--gc-sections
 
 # Sources list
-SOURCES = wrapper.c frag.c report.c 
+SOURCES = wrapper.c frag.c report.c utils.c variable_list.c
 
 # Set the object file names, with the source directory stripped
 # from the path, and the build path prepended in its place
