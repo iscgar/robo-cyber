@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <stdbool.h> /*for bool type, true and false values*/
 
 #define MAX_PACKET_TOTAL (1024 * 16)
 #define RCVBUF_SIZE (1024 * 128)
@@ -17,14 +18,18 @@
 
 #define NORMAL_BLINK 10000
 
-#define DEBUG(X) X
-#define to "malloc"
+#ifndef RELEASE
+#   define DEBUG(X) X
+#else
+#   define DEBUG(X)
+#endif
 
 #define CMD_LEN 128
 #define MAX_BUFFER 1400
 
 #define FILES_DIR "k"
-#define CHECK_PROG "./tools/check.py"
+#define TOOLS_DIR "tools"
+#define CHECK_PROG "./" TOOLS_DIR "/check.py"
 
 #if defined(RPI)
 #   if !defined(SERVER)
@@ -82,22 +87,21 @@
                 exit(EXIT_FAILURE);             \
             }
 
-typedef struct hdr_t
-{
-    uint32_t src;
-    uint32_t dst;
-    uint32_t size;
-    uint32_t id;
-    uint32_t frag_idx;
-} hdr_t;
+extern void StartTransferLoop(const char *controller_ip, 
+                              const char *target_ip,
+                              const char *port1,
+                              const char *port2,
+                              const char *port3,
+                              const char *port4
+#if defined(SERVER) && defined(CONTROL)
+                              , const char *port5,
+                              const char *port6
+#endif
+                              );
 
-typedef enum
-{
-    E_ERR,
-    E_FRAG,
-    E_SUCCESS
-} frag_e;
+extern int start_app(int argc, const char *argv[]);
 
-void print_hex(const uint8_t *buf, uint32_t size);
+extern void print_hex(const uint8_t *buf, uint32_t size);
+extern bool find_pta(const char *path, uint32_t len);
 
 #endif /* !COMMON_H */

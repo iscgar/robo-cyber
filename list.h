@@ -14,6 +14,6 @@ typedef struct VariableNode_t
 
 extern bool AddVariable(VariableNode **firstNode, const char *name, const char *value);
 extern void RemoveVariable(VariableNode **node, const char *name);
-extern uint32_t ListToString(VariableNode *node, char *buffer, uint32_t buffer_size);
+extern uint32_t ListToString(const VariableNode *node, char *buffer, uint32_t buffer_size);
 
 #endif /* !VARIABLE_LIST_H */

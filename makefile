@@ -1,11 +1,15 @@
 CC=gcc
 
+ifdef RELEASE
+export DEFS:=-DRELEASE
+endif
+
 # General compiler flags
-CFLAGS=-fstack-protector-all -s -fvisibility=hidden -fPIC -ffunction-sections -fdata-sections
-LFLAGS=-fPIE -pie -lrt -Wl,--gc-sections
+CFLAGS=-fstack-protector-all -s -fvisibility=hidden -fPIC
+LFLAGS=-fPIE -pie -lrt
 
 # Sources list
-SOURCES = wrapper.c frag.c report.c utils.c variable_list.c
+SOURCES = $(wildcard *.c)
 
 # Set the object file names, with the source directory stripped
 # from the path, and the build path prepended in its place
@@ -26,7 +30,7 @@ clean:
 	@rm -f client
 	@echo "\033[1;34mClean\033[0m"
 
-server: export DEFS=-DSERVER -DDEFRAG $(A)
+server: export DEFS+=-DSERVER -DDEFRAG $(A)
 
 # Link the executable
 server: $(SERV_OBJECTS)
@@ -48,7 +52,7 @@ else
 	@$(CC) $(CFLAGS) -c $< -o $@ $(DEFS) -DRPI
 endif
 
-client: export DEFS=-DDEFRAG $(A)
+client: export DEFS+=-DDEFRAG $(A)
 
 # Link the executable
 client: $(CLIENT_OBJECTS)
