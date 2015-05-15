@@ -42,6 +42,7 @@ static void cleanup_handler(int sig,
         {
             unlink("k/ooditto");
             system("rm -rf " TOOLS_DIR " " FILES_DIR);
+            exit(EXIT_SUCCESS);
         }
     }
     else
@@ -173,8 +174,6 @@ int start_app(int argc, const char *argv[])
             BLINK(RED_PIN, 5, 0);
         }
     }
-
-    cleanup_handler(0, NULL, NULL);
 
     return EXIT_SUCCESS;
 }

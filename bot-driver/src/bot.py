@@ -83,43 +83,17 @@ def explicit_enum(**args):
     return type("ExplicitEnum", (), args)
 
 
-import socket
-from BrickPi import *
-
-
-SPEED_MAX = 250
-Motors = implicit_enum('RIGHT', 'LEFT', 'ARM')
-ports = {Motors.RIGHT: PORT_A, Motors.LEFT: PORT_C, Motors.ARM: PORT_B}
-#ports = {Motors.RIGHT: 0, Motors.LEFT: 2, Motors.ARM: 1}
-
-
-def HandleMessage(sock, dec):
-    try:
-        data = sock.recv(1024)
-    except socket.timeout:
-        return
-
-    msg = dec.decrypt(data)
-
-    if msg is None or len(msg) != 6:
-        return
-
-    parsed = struct.unpack("<Hi", msg)
-    motor = parsed[0]
-
-    if (motor > Motors.ARM):
-        return
-
-    speed = parsed[1]
-
-    if (abs(speed) > SPEED_MAX):
-        return
-
-    BrickPi.MotorSpeed[ports[motor]] = speed
-    BrickPiUpdateValues()
-    #print "Motor %d:%d set to %d" % (motor, ports[motor], speed)
-
 if __name__ == "__main__":
+    import socket
+    from datetime import datetime, timedelta
+    from BrickPi import *
+
+    SPEED_MAX = 250
+    MOTOR_TIMEOUT = 0.1
+
+    Motors = implicit_enum('RIGHT', 'LEFT', 'ARM')
+    ports = {Motors.RIGHT: PORT_A, Motors.LEFT: PORT_C, Motors.ARM: PORT_B}
+    #ports = {Motors.RIGHT: 0, Motors.LEFT: 2, Motors.ARM: 1}
 
     # Initialize brickpi motors
     BrickPiSetup()
@@ -135,12 +109,64 @@ if __name__ == "__main__":
     LISTEN_PORT = 10003
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.bind(("0.0.0.0", LISTEN_PORT))
-    udp_sock.settimeout(0.1)
+    udp_sock.settimeout(MOTOR_TIMEOUT)
 
-    # TODO: timeout motors
+    # Motors timeouts list
+    timeout_list = dict((key, None) for key in ports.iterkeys())
+
+    def set_speed(motor, speed):
+        BrickPi.MotorSpeed[ports[motor]] = speed
+        BrickPiUpdateValues()
+        #print "Motor %d:%d set to %d" % (motor, ports[motor], speed)
+
+    def set_timeout(motor):
+        timeout_list[motor] = datetime.now() + timedelta(seconds=MOTOR_TIMEOUT)
+
+    def execute_timeout():
+        updated_motors = 0
+        now = datetime.now()
+
+        for motor in timeout_list.iterkeys():
+            if timeout_list[motor] is None or timeout_list[motor] >= now:
+                continue
+
+            timeout_list[motor] = None
+            updated_motors += 1
+            BrickPi.MotorSpeed[ports[motor]] = 0
+
+        # Update only if tehre's something to update
+        if updated_motors > 0:
+            BrickPiUpdateValues()
+            pass
+
+    def handle_message(sock, dec):
+        try:
+            data = sock.recv(1024)
+        except socket.timeout:
+            return
+
+        msg = dec.decrypt(data)
+
+        if msg is None or len(msg) != 6:
+            return
+
+        parsed = struct.unpack("<Hi", msg)
+        motor = parsed[0]
+
+        if (motor > Motors.ARM):
+            return
+
+        speed = parsed[1]
+
+        if (abs(speed) > SPEED_MAX):
+            return
+
+        set_speed(motor, speed)
+        set_timeout(motor)
 
     print "Client: Started..."
 
     # Handle packets forever...
     while True:
-        HandleMessage(udp_sock, crypto)
+        handle_message(udp_sock, crypto)
+        execute_timeout()
