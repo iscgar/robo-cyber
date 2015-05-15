@@ -28,7 +28,10 @@ class SafeProtocolEncryptor(object):
         s += padlen * chr(padlen)
         s = struct.pack("<I", binascii.crc32(s, self._CRC_IV) & 0xffffffff) + s
         new_id = self._mangle_id()
-        packed_id = struct.pack("<BHI", new_id >> 48, (new_id >> 32) & 0xffff, new_id & 0xffffffff)
+        packed_id = struct.pack("<BHI",
+                                new_id >> 48,
+                                (new_id >> 32) & 0xffff,
+                                new_id & 0xffffffff)
         return packed_id + crypt.encrypt(s)
 
     def _update_time(self):
@@ -134,8 +137,12 @@ class DualShock3(object):
                             B_SQUARE=15,
                             B_PS=16)
 
-    analog_axes = dict((key, 0) for key in Analog.__dict__.keys())
-    digital_buttons = dict((key, 0) for key in Digital.__dict__.keys())
+    analog_axes = dict((value, 0)
+                       for (key, value) in Analog.__dict__.iteritems()
+                       if not key.startswith('_'))
+    digital_buttons = dict((value, 0)
+                           for (key, value) in Digital.__dict__.iteritems()
+                           if not key.startswith('_'))
     _ps3 = None
 
     def __init__(self):
@@ -166,10 +173,10 @@ class DualShock3(object):
 
         pygame.event.get()
 
-        for a in self.analog_axes.keys():
+        for a in self.analog_axes.iterkeys():
             self.analog_axes[a] = self._ps3.get_axis(a)
 
-        for d in self.digital_buttons.keys():
+        for d in self.digital_buttons.iterkeys():
             self.digital_buttons[d] = self._ps3.get_button(d)
 
     def cleanup(self):
