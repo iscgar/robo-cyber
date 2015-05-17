@@ -88,7 +88,7 @@ if __name__ == "__main__":
     from datetime import datetime, timedelta
     from BrickPi import *
 
-    SPEED_MAX = 250
+    SPEED_MAX = 255
     MOTOR_TIMEOUT = 0.1
 
     Motors = implicit_enum('RIGHT', 'LEFT', 'ARM')
@@ -115,8 +115,11 @@ if __name__ == "__main__":
     timeout_list = dict((key, None) for key in ports.iterkeys())
 
     def set_speed(motor, speed):
-        BrickPi.MotorSpeed[ports[motor]] = speed
-        BrickPiUpdateValues()
+        port = ports[motor]
+
+        if BrickPi.MotorSpeed[port] != speed:
+            BrickPi.MotorSpeed[port] = speed
+            BrickPiUpdateValues()
         #print "Motor %d:%d set to %d" % (motor, ports[motor], speed)
 
     def set_timeout(motor):
@@ -131,8 +134,11 @@ if __name__ == "__main__":
                 continue
 
             timeout_list[motor] = None
-            updated_motors += 1
-            BrickPi.MotorSpeed[ports[motor]] = 0
+            port = ports[motor]
+
+            if BrickPi.MotorSpeed[port] != 0:
+                updated_motors += 1
+                BrickPi.MotorSpeed[port] = 0
 
         # Update only if tehre's something to update
         if updated_motors > 0:

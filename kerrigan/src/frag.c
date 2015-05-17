@@ -13,7 +13,7 @@
 
 #define MAX_COLLECTORS 128
 #define ID_WINDOW_SIZE 5
-#define DROP_PACKET(x) printf("Packet dropped: %s\n", x)
+#define DROP_PACKET(x) DEBUG(printf("Packet dropped: %s\n", x))
 
 typedef struct collector_t
 {
@@ -24,7 +24,7 @@ typedef struct collector_t
     uint32_t last_update;
     uint32_t packet_size;
     uint32_t id;
-    uint8_t available;
+    bool available;
 } collector_t;
 
 static uint8_t* build_packet(collector_t *collector);
@@ -39,7 +39,6 @@ static uint32_t id_bitmap = 0;
 #endif
 
 static uint32_t g_id = 0;
-static uint32_t last_received_id = 0;
 static collector_t collectors[MAX_COLLECTORS];
 
 void init_collectors(void)
@@ -79,7 +78,7 @@ frag_e collect_packets(const uint8_t *pkt_buffer, uint32_t pkt_len, uint8_t **o_
     {
         /* Drop packet. Too large. */
         DROP_PACKET("Invalid fragment size");
-        printf("%d\n", pkt_len);
+        DEBUG(printf("%d\n", (int)pkt_len));
 
         return E_ERR;
     }
@@ -103,6 +102,13 @@ frag_e collect_packets(const uint8_t *pkt_buffer, uint32_t pkt_len, uint8_t **o_
     }
 #endif
 
+    if (pkt->size > MAX_PACKET_TOTAL)
+    {
+        DROP_PACKET("Packet too large");
+
+        return E_ERR;
+    }
+
     /* Get the relevant collector */
     for (index = 0; index < MAX_COLLECTORS; ++index)
     {
@@ -120,30 +126,21 @@ frag_e collect_packets(const uint8_t *pkt_buffer, uint32_t pkt_len, uint8_t **o_
         collector = &collectors[get_available_collector()];
     }
 
-    if (pkt->size > MAX_PACKET_TOTAL)
-    {
-        DROP_PACKET("Packet too large");
-
-        return E_ERR;
-    }
-
     /* Check if it is the first fragment received for this collector */
     if (collector->available)
     {
-        uint32_t total_fragments = pkt->size / MAX_PACKET_SIZE + !!(pkt->size % MAX_PACKET_SIZE);
+        collector->total_fragments = (pkt->size + MAX_PACKET_SIZE - 1) / MAX_PACKET_SIZE;
 
-        /* XXX: This is because of the check below if the fragment exists
-         using bitmap of 32 bits. Only undefined behaviour, though, and no crash */
-        /* if (total_fragments > 32)
+        if (pkt->frag_idx >= collector->total_fragments)
         {
-            REPORT();
-            DROP_PACKET("Can't accept more than 32 fragments");
+            /* Invalid fragment ID */
+            DROP_PACKET("New fragment ID invalid");
 
             return E_ERR;
-        } */
+        }
 
         /* Add the fragment to the fragments list */
-        collector->packets = (uint8_t **)calloc(collector->total_fragments * sizeof(uint8_t *), 1);
+        collector->packets = (uint8_t **)calloc(collector->total_fragments, sizeof(uint8_t *));
 
         if (collector->packets == NULL)
         {
@@ -154,10 +151,9 @@ frag_e collect_packets(const uint8_t *pkt_buffer, uint32_t pkt_len, uint8_t **o_
 
         /* Set all the primary arguments */     
         collector->id = pkt->id;
-        collector->total_fragments = total_fragments;
 
         /* Collector is not available */
-        collector->available = 0;
+        collector->available = false;
 
         /* Set packet size */
         collector->packet_size = pkt->size;
@@ -195,7 +191,6 @@ frag_e collect_packets(const uint8_t *pkt_buffer, uint32_t pkt_len, uint8_t **o_
         DROP_PACKET("Invalid fragment ID");
 
         return E_ERR;
-
     }
 
     /* No need to check for fragment size as all fragments are the same size */
@@ -270,8 +265,12 @@ frag_e collect_packets(const uint8_t *pkt_buffer, uint32_t pkt_len, uint8_t **o_
             return E_ERR;
         }
 
-        printf("Finished packet: ID: %d Fragments: %d Size: %d Packet buffer: %p\n", collector->id, collector->total_fragments, collector->packet_size, packet);
-        print_hex(packet, collector->packet_size);
+        DEBUG(printf("Finished packet: ID: %d Fragments: %d Size: %d Packet buffer: %p\n", 
+                     (int)collector->id,
+                     (int)collector->total_fragments,
+                     (int)collector->packet_size,
+                     packet));
+        DEBUG(print_hex(packet, collector->packet_size));
 
         *o_full_packet = packet;
         *o_full_packet_size = collector->packet_size;
@@ -295,7 +294,6 @@ uint8_t** break_packet(const uint8_t *packet, uint32_t size, uint32_t src, uint3
     const uint32_t frag_size = sizeof(hdr_t) + MAX_PACKET_SIZE;
 
     /* Code section */
-
     if ((packet == NULL) || (o_frags == NULL))
     {
         REPORT();
@@ -305,30 +303,30 @@ uint8_t** break_packet(const uint8_t *packet, uint32_t size, uint32_t src, uint3
     /* Allocate memory for the array of fragments */
     packets = (uint8_t **)malloc(sizeof(uint8_t *));
 
+    if (packets == NULL)
+    {
+        REPORT();
+        return NULL;
+    }
+
     /* We at least have one fragment */
-    *o_frags = 1;
+    *o_frags = 0;
 
     do
     {
         /* Allocate memory for the fragment */
-        frag = (hdr_t *)malloc(frag_size);
+        frag = (hdr_t *)calloc(frag_size, 1);
 
         if (frag == NULL)
         {
             REPORT();
-            free_frag_packets(packets, *o_frags - 1);
-            free(packets);
-            packets = NULL;
-            break;
+            goto error;
         }
-
-        /* Clear all previously remaind data */
-        memset(frag, 0, frag_size);
 
         /* Build header */
         frag->size = orig_size;
         frag->id = id;
-        frag->frag_idx = *o_frags - 1;
+        frag->frag_idx = *o_frags;
         frag->src = src;
         frag->dst = dst;
 
@@ -336,7 +334,10 @@ uint8_t** break_packet(const uint8_t *packet, uint32_t size, uint32_t src, uint3
         memcpy((uint8_t *)&frag[1], packet, size < MAX_PACKET_SIZE ? size : MAX_PACKET_SIZE);
 
         /* Set the fragment in the list */
-        packets[*o_frags - 1] = (uint8_t *)frag;
+        packets[*o_frags] = (uint8_t *)frag;
+
+        /* Increase number of fragments */
+        ++(*o_frags);
 
         /* Quit loop if we finished processing */
         if (size <= MAX_PACKET_SIZE)
@@ -348,25 +349,26 @@ uint8_t** break_packet(const uint8_t *packet, uint32_t size, uint32_t src, uint3
         packet += MAX_PACKET_SIZE;
         size -= MAX_PACKET_SIZE;
 
-        /* Increase number of fragments */
-        ++(*o_frags);
-
         /* Realloc the array */
-        new_packets = realloc(packets, *o_frags * sizeof(uint8_t *));
+        new_packets = (uint8_t **)realloc(packets, (*o_frags + 1) * sizeof(uint8_t *));
 
         if (new_packets == NULL)
         {
             REPORT();
-
-            free_frag_packets(packets, *o_frags - 1);
-            *o_frags = 0;
-            free(packets);
-            packets = NULL;
-            break;
+            goto error;
         }
+
+        packets = new_packets;
     } while (size);
 
     return packets;
+
+error:
+    free_frag_packets(packets, *o_frags);
+    *o_frags = 0;
+    free(packets);
+
+    return NULL;
 }
 
 static uint8_t* build_packet(collector_t *collector)
@@ -381,33 +383,31 @@ static uint8_t* build_packet(collector_t *collector)
     /* Allocate memory for the packet */
     packet = (uint8_t *)malloc(collector->packet_size);
 
-    if (packet == NULL)
+    if ((packet != NULL) || (collector->packet_size > 0))
     {
-        return NULL;
-    }
+        pkt_ptr = packet;
 
-    pkt_ptr = packet;
+        /* Get the packets array */
+        pkts = collector->packets;
 
-    /* Get the packets array */
-    pkts = collector->packets;
+        /* Get total size */
+        total = collector->packet_size;
 
-    /* Get total size */
-    total = collector->packet_size;
+        /* Start building the packet */
+        for (i = 0;
+             (total >= MAX_PACKET_SIZE) && (i < collector->total_fragments);
+             ++i)
+        {
+            memcpy(pkt_ptr, pkts[i], MAX_PACKET_SIZE);
+            pkt_ptr += MAX_PACKET_SIZE;
+            total -= MAX_PACKET_SIZE;
+        }
 
-    /* Start building the packet */
-    for (i = 0;
-         (total >= MAX_PACKET_SIZE) && (i < collector->total_fragments);
-         ++i)
-    {
-        memcpy(pkt_ptr, pkts[i], MAX_PACKET_SIZE);
-        pkt_ptr += MAX_PACKET_SIZE;
-        total -= MAX_PACKET_SIZE;
-    }
-
-    /* Copt the rest of the packet */
-    if (total > 0)
-    {
-        memcpy(pkt_ptr, pkts[i], total);
+        /* Copt the rest of the packet */
+        if (total > 0)
+        {
+            memcpy(pkt_ptr, pkts[i], total);
+        }
     }
 
     return packet;
@@ -417,7 +417,7 @@ static void reset_collector(collector_t *collector)
 {
     /* Reset the collector */
     memset((uint8_t *)collector, 0, sizeof(collector_t));
-    collector->available = 1;
+    collector->available = true;
 }
 
 static void free_frag_packets(uint8_t **packets, uint32_t num)
@@ -430,8 +430,11 @@ static void free_frag_packets(uint8_t **packets, uint32_t num)
     for (index = 0; index < num; ++index)
     {
         /* Free the fragment */
-        free(packets[index]);
-        packets[index] = NULL;
+        if (packets[index])
+        {
+            free(packets[index]);
+            packets[index] = NULL;
+        }
     }
 }
 
@@ -443,7 +446,7 @@ static void free_fragments(collector_t *collector)
     }
     else
     {
-        free_frag_packets(collector->packets, collector->fragments);
+        free_frag_packets(collector->packets, collector->total_fragments);
         free(collector->packets);
     }
 
@@ -454,7 +457,7 @@ static uint32_t get_available_collector()
 {
     /* Variable definition */
     uint32_t index;
-    uint32_t lowest_time = ~0;
+    uint32_t lowest_time = (uint32_t)~0;
     uint32_t lowest_index = 0;
 
     /* Code section */

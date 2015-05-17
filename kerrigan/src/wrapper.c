@@ -12,6 +12,10 @@
 #include "common.h"
 #include "proto.h"
 
+#ifdef DEFRAG
+#   include "frag.h"
+#endif
+
 static int InitServerSocket(const char *hostPort)
 {   
     int sockfd = -1, res;
@@ -189,8 +193,7 @@ void StartTransferLoop(const char *controller_ip,
 
 int main(int argc, const char *argv[])
 {
-    int fd;
-    DEBUG(printf("%d\n", getpid()));
+    DEBUG(printf("PID: %d\n", getpid()));
 
     return start_app(argc, argv);
 }

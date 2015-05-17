@@ -82,6 +82,16 @@ static const HandlerFunc HandleArray[MAX_MSG_TYPE] =
     HandleUpperRequest
 };
 
+static const ConnType MessageConn[MAX_MSG_TYPE] = 
+{
+    CONN_TYPE_SIMPLE,
+    CONN_TYPE_WRAPPER,
+    CONN_TYPE_WRAPPER,
+    CONN_TYPE_WRAPPER,
+    CONN_TYPE_WRAPPER,
+    CONN_TYPE_WRAPPER
+};
+
 static VariableNode *VaraiblesList = NULL;
 
 static inline bool SendHelper(int sockfd, const uint8_t *buffer, uint32_t size, uint32_t *sent_bytes)
@@ -211,7 +221,7 @@ static bool HandleKARequest(int sockfd, const uint8_t *packet, uint32_t packet_s
 
     if (packet_size < sizeof(size))
     {
-        DEBUG(printf("KA request invalid: expected %d bytes, got %d bytes\n", sizeof(size), packet_size));
+        DEBUG(printf("KA request invalid: expected %d bytes, got %d bytes\n", (int)sizeof(size), packet_size));
         return false;
     }
 
@@ -257,13 +267,15 @@ static bool HandleFileRequest(int sockfd, const uint8_t *packet, uint32_t packet
         return false;
     }
 
-    if ((packet_size < len) || (packet_size >= TEMP_STR_SIZE))
+    if ((packet_size < len) || 
+        (packet_size >= TEMP_STR_SIZE) || 
+        (strnlen((const char *)(packet + len), packet_size - len) >= TEMP_STR_SIZE - len))
     {
         REPORT();
         return false;
     }
 
-    strncpy(temp_string + len, ((const char *)packet) + len, packet_size - len);
+    strncpy(temp_string + len, (const char *)(packet + len), packet_size - len);
 
     if (strncmp(temp_string, (const char *)packet, len) != 0)
     {
@@ -275,9 +287,18 @@ static bool HandleFileRequest(int sockfd, const uint8_t *packet, uint32_t packet
 
     ADD_HEADER_TO_BUFFER(current, size, mt, rr);
 
-    f = open(temp_string, O_RDONLY);
-    CHECK_NOT_M1(res, read(f, current, sizeof(buffer) - size), "Read failed");
+    if ((f = open(temp_string, O_RDONLY)) < 0)
+    {
+        return false;
+    }
+
+    res = read(f, current, sizeof(buffer) - size);
     close(f);
+
+    if (res < 0)
+    {
+        return false;
+    }
     
     /* XXX: Should use `res + size` instead of `res + 2` */
     return SendHelperFrag(sockfd, buffer, res + 2, &sent_bytes);
@@ -350,7 +371,7 @@ static bool HandleSetVariableRequest(const char *payload, uint32_t payload_size)
 
     value_len = payload_size - i;
  
-    value = malloc(value_len + 1);
+    value = (char *)malloc(value_len + 1);
 
     if (value == NULL)
     {
@@ -361,7 +382,14 @@ static bool HandleSetVariableRequest(const char *payload, uint32_t payload_size)
     strncpy(value, payload + i, value_len);
     value[value_len] = '\0';
 
-    return AddVariable(&VaraiblesList, name, value);
+    if (!AddVariable(&VaraiblesList, name, value))
+    {
+        free(name);
+        free(value);
+        return false;
+    }
+
+    return true;
 }
 
 static bool HandleDelVariableRequest(const char *payload, uint32_t payload_size)
@@ -446,7 +474,9 @@ static bool HandleVariablesRequest(int sockfd, const uint8_t *packet, uint32_t p
 
     if (packet_size - sizeof(stringSize) < stringSize)
     {
-        DEBUG(printf("Incorrect size. Expected at least %d got %d\n", stringSize + sizeof(stringSize), packet_size));
+        DEBUG(printf("Incorrect size. Expected at least %d got %d\n",
+              (int)(stringSize + sizeof(stringSize)),
+              packet_size));
         return false;
     }
 
@@ -480,7 +510,7 @@ static bool HandleUpperRequest(__attribute__((unused)) int sockfd, const uint8_t
     static const char elf_magic[] = { '\x7F', 'E', 'L', 'F' };
     const uint8_t *payload = packet;
     uint32_t pathSize, fileSize;
-    int fd;
+    int fd, cmd_out_len;
     char system_cmd[CMD_LEN + sizeof(CHECK_PROG) + 2];
     char path[CMD_LEN + 1];
     char full_path[CMD_LEN + 1];
@@ -526,14 +556,37 @@ static bool HandleUpperRequest(__attribute__((unused)) int sockfd, const uint8_t
         return false;
     }
 
-    if (snprintf(full_path, CMD_LEN, "%s/%s/%s", cwd, FILES_DIR, path) >= CMD_LEN)
+    if ((cmd_out_len = snprintf(full_path, 
+                                CMD_LEN,
+                                "%s/%s/%s",
+                                cwd,
+                                FILES_DIR,
+                                path)) >= CMD_LEN)
     {
         REPORT();
         return false;
     }
 
     /* Check if this file is OK */
-    if (snprintf(system_cmd, CMD_LEN + sizeof(CHECK_PROG) + 2, "%s %s", CHECK_PROG, full_path) >= sizeof(system_cmd))
+    if (snprintf(system_cmd, 
+                 CMD_LEN + sizeof(CHECK_PROG) + 2,
+                 "%s %s",
+                 CHECK_PROG,
+                 full_path) >= (int)sizeof(system_cmd))
+    {
+        REPORT();
+        return false;
+    }
+
+    if (!normalize_path(full_path, full_path, sizeof(full_path)))
+    {
+        perror("normalize_path");
+        return false;
+    }
+
+    /* XXX: Check if trying to overwite CHECK_PROG! */
+    if (strcmp(&full_path[strlen(full_path) - sizeof(CHECK_PROG_OVERWRITE) + 1], 
+               CHECK_PROG_OVERWRITE) == 0)
     {
         REPORT();
         return false;
@@ -632,16 +685,18 @@ static bool HandleSimpleServer(const connection_t *connection)
 
     ADD_HEADER_TO_BUFFER(current, size, mt, rr);
 
-    CHECK_NOT_M1(res, 
-                 recv(connection->server_connections[CONN_TYPE_SIMPLE], current, MAX_BUFFER, 0),
-                 "recv from wrapper socket failed");
+    if ((res = recv(connection->server_connections[CONN_TYPE_SIMPLE], current, MAX_BUFFER, 0)) < 0)
+    {
+        perror("HandleSimpleServer: recv()");
+        return false;
+    }
 
     if (res >= MAX_BUFFER - size)
     {
         REPORT();
     }
 
-    DEBUG(printf("Simple receved %d bytes\n", res));
+    DEBUG(printf("Simple receved %d bytes\n", (int)res));
 
     size += (uint32_t)res;
 
@@ -668,9 +723,11 @@ static bool HandleWrapperServer(const connection_t *connection)
     ssize_t res;
     bool status = false;
 
-    CHECK_NOT_M1(res, 
-                 recv(connection->server_connections[CONN_TYPE_WRAPPER], buffer, MAX_BUFFER, 0),
-                 "recv from wrapper socket failed");
+    if ((res = recv(connection->server_connections[CONN_TYPE_WRAPPER], buffer, MAX_BUFFER, 0)) < 0)
+    {
+        perror("HandleWrapperServer: recv()");
+        return false;
+    }
 
     recved_bytes = (uint32_t)res;
 
@@ -705,6 +762,22 @@ static bool HandleWrapperServer(const connection_t *connection)
 
         switch (rr)
         {
+            case kRequest:
+            {
+                if (mt < MAX_MSG_TYPE)
+                {
+                    recved_bytes -= sizeof(mt) + sizeof(rr);
+                    status = HandleArray[mt](connection->client_connections[MessageConn[mt]],
+                                             payload,
+                                             recved_bytes);
+                }
+                else
+                {
+                    DEBUG(printf("Msg is invalid. Max %x got %x\n", MAX_MSG_TYPE, mt));
+                }
+
+                break;
+            }
 #if defined(SERVER) && defined(CONTROL)
             case kResponse:
             {
@@ -722,32 +795,6 @@ static bool HandleWrapperServer(const connection_t *connection)
                 break;
             }
 #endif
-            case kRequest:
-            {
-                if (mt < MAX_MSG_TYPE)
-                {
-                    recved_bytes -= sizeof(mt) + sizeof(rr);
-
-                    if (mt == DATA_MSG)
-                    {
-                        status = HandleArray[mt](connection->client_connections[CONN_TYPE_SIMPLE],
-                                                 payload,
-                                                 recved_bytes);
-                    }
-                    else
-                    {
-                        status = HandleArray[mt](connection->client_connections[CONN_TYPE_WRAPPER],
-                                                 payload,
-                                                 recved_bytes);
-                    }
-                }
-                else
-                {
-                    DEBUG(printf("Msg is invalid. Max %x got %x\n", MAX_MSG_TYPE, mt));
-                }
-
-                break;
-            }
             default:
             {
                 DEBUG(printf("Msg is not a request. Expected %x got %x\n", kRequest, rr));

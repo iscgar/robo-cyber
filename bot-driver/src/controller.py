@@ -185,19 +185,17 @@ class DualShock3(object):
 
 
 if __name__ == "__main__":
-    import signal
+    import sys
+    import traceback
     import socket
 
     ROBO_IP = "localhost"
     ROBO_PORT = 10001
-    SPEED_MAX = 250
+    SPEED_MAX = 255
 
     Motors = implicit_enum('RIGHT', 'LEFT', 'ARM')
 
     controller = DualShock3()
-
-    def cleanup_handler(signal, frame):
-        controller.cleanup()
 
     def send_bot_ctrl(sock, crypto, data):
         sock.sendto(crypto.encrypt(data), (ROBO_IP, ROBO_PORT))
@@ -217,38 +215,47 @@ if __name__ == "__main__":
         back = ctrl.analog_axes[ctrl.Analog.B_L2]
 
         # Normalize mutual press
-        right = left = (forward - back) * SPEED_MAX
+        wheels_speed = (forward - back) * SPEED_MAX
+        right = left = wheels_speed
 
-        # Get turn parameters from controller
-        turn = ctrl.analog_axes[ctrl.Analog.JOY_RIGHT_X]
-        abs_turn = abs(turn)
-        in_place_turn = ctrl.digital_buttons[ctrl.Digital.B_UP] | \
-            ctrl.digital_buttons[ctrl.Digital.B_RIGHT] | \
-            ctrl.digital_buttons[ctrl.Digital.B_DOWN] | \
-            ctrl.digital_buttons[ctrl.Digital.B_LEFT]
+        # Ignore turn values when not in movement
+        if wheels_speed != 0:
+            # Get turn parameters from controller
+            turn = ctrl.analog_axes[ctrl.Analog.JOY_RIGHT_X]
+            abs_turn = abs(turn)
+            in_place_turn = ctrl.digital_buttons[ctrl.Digital.B_UP] | \
+                ctrl.digital_buttons[ctrl.Digital.B_RIGHT] | \
+                ctrl.digital_buttons[ctrl.Digital.B_DOWN] | \
+                ctrl.digital_buttons[ctrl.Digital.B_LEFT]
 
-        # Calculate wheels turn
-        if (abs_turn > 0.1):
-            if (turn > 0):
-                left = 0 if in_place_turn == 0 else abs_turn * (-right)
-            else:
-                right = 0 if in_place_turn == 0 else abs_turn * (-left)
+            # Calculate wheels turn
+            if (abs_turn > 0.1):
+                if (turn > 0):
+                    left = 0 if in_place_turn == 0 else abs_turn * (-right)
+                else:
+                    right = 0 if in_place_turn == 0 else abs_turn * (-left)
 
         return right, left, arm
 
-    controller.init()
-    signal.signal(signal.SIGINT, cleanup_handler)
+    try:
+        controller.init()
 
-    crypto = SafeProtocolEncryptor("I am Johnny Six")
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        crypto = SafeProtocolEncryptor("I am Johnny Six")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    while True:
-        controller.update()
+        while True:
+            controller.update()
 
-        right, left, arm = get_speeds(controller)
+            right, left, arm = get_speeds(controller)
 
-        send_bot_ctrl(sock, crypto, struct.pack("<Hi", Motors.RIGHT, right))
-        send_bot_ctrl(sock, crypto, struct.pack("<Hi", Motors.LEFT, left))
-        send_bot_ctrl(sock, crypto, struct.pack("<Hi", Motors.ARM, arm))
+            send_bot_ctrl(sock, crypto, struct.pack("<Hi", Motors.RIGHT, right))
+            send_bot_ctrl(sock, crypto, struct.pack("<Hi", Motors.LEFT, left))
+            send_bot_ctrl(sock, crypto, struct.pack("<Hi", Motors.ARM, arm))
 
-        pygame.time.wait(50)
+            pygame.time.wait(50)
+    except KeyboardInterrupt:
+        pass
+    except Exception:
+        traceback.print_exc(file=sys.stdout)
+
+    controller.cleanup()

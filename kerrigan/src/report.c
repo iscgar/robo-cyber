@@ -79,7 +79,7 @@ void reporter_report(const char *func_name)
 {
     static uint8_t packet_data[REPORTER_MAX_PKT_SIZE];
 
-    printf("Reporting bug in %s\n", func_name);
+    DEBUG(printf("Reporting bug in %s\n", func_name));
 
     /* Do nothing if we don't have a socket */
     if ((reporter_sock != -1) && (func_name))
@@ -92,11 +92,11 @@ void reporter_report(const char *func_name)
 
         if (send(reporter_sock, packet_data, sizeof(len) + len, 0) < 0)
         {
-            perror("reporter_report: send()");
+            DEBUG(perror("reporter_report: send()"));
         }
         else
         {
-            puts("Reported!");
+            DEBUG(puts("Reported!"));
             BLINK(BLUE_PIN, 1, 0);
         }
     }

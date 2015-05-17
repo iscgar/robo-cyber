@@ -2,9 +2,10 @@
 
 #include <stdio.h>
 #include <stdbool.h> /*for bool type, true and false values*/
-#include <unistd.h> /*sleep, getpid*/
 #include <fcntl.h>
 #include <sys/wait.h> /*wait*/
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <signal.h> /* for destruction */
 #include "common.h"
 #include "report.h"
@@ -31,17 +32,17 @@ static void cleanup_handler(int sig,
 {
     DEBUG(printf("Caught(%d): %d\n", getpid(), sig));
 
-    reporter_cleanup();
-
     if (cpid != 0)
     {
-        DEBUG(puts("Killing child..."));
+        reporter_cleanup();
+
+        DEBUG((void)puts("Killing child..."));
         kill(cpid, SIGTERM);
 
         if (sig == SIGINT)
         {
-            unlink("k/ooditto");
-            system("rm -rf " TOOLS_DIR " " FILES_DIR);
+            (void)unlink(FILES_TOOLS_SYMLINK);
+            (void)system("rm -rf " TOOLS_DIR " " FILES_DIR);
             exit(EXIT_SUCCESS);
         }
     }
@@ -80,7 +81,8 @@ int start_app(int argc, const char *argv[])
 
     if (!getuid())
     {
-        setuid(1000);
+        int res;
+        CHECK_NOT_M1(res, setuid(1000), "Failed to set uid");
     }
 
     /* Set LED pins */
@@ -107,7 +109,7 @@ int start_app(int argc, const char *argv[])
     }
 
     /* Remove tools and k directories */
-    system("rm -rf " TOOLS_DIR " " FILES_DIR);
+    (void)system("rm -rf " TOOLS_DIR " " FILES_DIR);
 
     /* Setup the env for usage */
     if (mkdir(FILES_DIR, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0)
@@ -122,7 +124,7 @@ int start_app(int argc, const char *argv[])
         return EXIT_FAILURE;
     }
 
-    symlink("../" TOOLS_DIR, "k/ooditto");
+    (void)symlink("../" TOOLS_DIR, FILES_TOOLS_SYMLINK);
 
     for (;;)
     {

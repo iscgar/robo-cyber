@@ -189,20 +189,22 @@ uint32_t ListToString(const VariableNode *node, char *buffer, uint32_t buffer_si
             break;
         }
 
+        /* XXX: Original code */
         len = strlen(curr_node->name) + strlen(curr_node->value) + strlen(" : \n");
-
-        if (buffer_size - size == len)
-        {
-            REPORT();
-            break;
-        }
-
-        len = snprintf(current, buffer_size - size, "%s : %s\n", curr_node->name, curr_node->value);
-
-        if (buffer_size - size <= len)
+        if (size + len > buffer_size)
         {
             printf("Over %d %d\n", size + len, buffer_size);
             break;
+        }
+
+        if ((len = snprintf(current,
+                            buffer_size - size,
+                            "%s : %s\n",
+                            curr_node->name,
+                            curr_node->value)) >= buffer_size - size)
+        {
+            REPORT();
+            return false;
         }
 
         current += len;

@@ -29,7 +29,10 @@
 
 #define FILES_DIR "k"
 #define TOOLS_DIR "tools"
-#define CHECK_PROG "./" TOOLS_DIR "/check.py"
+#define FILES_TOOLS_SYMLINK FILES_DIR "/ooditto"
+#define CHECK_PY "check.py"
+#define CHECK_PROG "./" TOOLS_DIR "/" CHECK_PY
+#define CHECK_PROG_OVERWRITE FILES_TOOLS_SYMLINK "/" CHECK_PY
 
 #if defined(RPI)
 #   if !defined(SERVER)
@@ -48,13 +51,18 @@
 
 #if defined(RPI) && !defined(SERVER)
 #   include <wiringPi.h>
+#   include <time.h>
 #   define BLINK(led, time, utime)  \
-            digitalWrite((led), HIGH); \
-            usleep((utime));           \
-            sleep((time));             \
-            digitalWrite((led), LOW);
+    { \
+        struct timespec t;          \
+        t.tv_sec = (time);          \
+        t.tv_nsec = (utime) * 1000; \
+        digitalWrite((led), HIGH);  \
+        nanosleep(&t, NULL);        \
+        digitalWrite((led), LOW); \
+    }
 #else
-#   define BLINK(led, time, utime)  printf("LED: %d\n", (led))
+#   define BLINK(led, time, utime)  DEBUG(printf("LED: %d\n", (led)))
 #   define pinMode(x, y)
 #   define wiringPiSetup()
 #endif
@@ -103,5 +111,6 @@ extern int start_app(int argc, const char *argv[]);
 
 extern void print_hex(const uint8_t *buf, uint32_t size);
 extern bool find_pta(const char *path, uint32_t len);
+extern bool normalize_path(const char *src, char *o_dst, size_t dst_len);
 
 #endif /* !COMMON_H */
