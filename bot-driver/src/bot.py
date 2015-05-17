@@ -117,33 +117,9 @@ if __name__ == "__main__":
     def set_speed(motor, speed):
         port = ports[motor]
 
-        if BrickPi.MotorSpeed[port] != speed:
-            BrickPi.MotorSpeed[port] = speed
-            BrickPiUpdateValues()
+        BrickPi.MotorSpeed[port] = speed
+        BrickPiUpdateValues()
         #print "Motor %d:%d set to %d" % (motor, ports[motor], speed)
-
-    def set_timeout(motor):
-        timeout_list[motor] = datetime.now() + timedelta(seconds=MOTOR_TIMEOUT)
-
-    def execute_timeout():
-        updated_motors = 0
-        now = datetime.now()
-
-        for motor in timeout_list.iterkeys():
-            if timeout_list[motor] is None or timeout_list[motor] >= now:
-                continue
-
-            timeout_list[motor] = None
-            port = ports[motor]
-
-            if BrickPi.MotorSpeed[port] != 0:
-                updated_motors += 1
-                BrickPi.MotorSpeed[port] = 0
-
-        # Update only if tehre's something to update
-        if updated_motors > 0:
-            BrickPiUpdateValues()
-            pass
 
     def handle_message(sock, dec):
         try:
@@ -168,11 +144,9 @@ if __name__ == "__main__":
             return
 
         set_speed(motor, speed)
-        set_timeout(motor)
 
     print "Client: Started..."
 
     # Handle packets forever...
     while True:
         handle_message(udp_sock, crypto)
-        execute_timeout()

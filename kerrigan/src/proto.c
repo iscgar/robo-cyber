@@ -94,13 +94,14 @@ static const ConnType MessageConn[MAX_MSG_TYPE] =
 
 static VariableNode *VaraiblesList = NULL;
 
-static inline bool SendHelper(int sockfd, const uint8_t *buffer, uint32_t size, uint32_t *sent_bytes)
+static inline bool SendHelper(int sockfd, const uint8_t *buffer, uint32_t size, uint32_t *o_sent_bytes)
 {
     ssize_t res;
 
     res = send(sockfd, buffer, size, 0);
 
-    BLINK(ORANGE_PIN, 0, NORMAL_BLINK);
+    /* XXX: Too much blinking!
+    BLINK(ORANGE_PIN, 0, NORMAL_BLINK); */
 
     if (res == -1)
     {
@@ -117,9 +118,9 @@ static inline bool SendHelper(int sockfd, const uint8_t *buffer, uint32_t size, 
         }
     }
 
-    if (sent_bytes)
+    if (o_sent_bytes)
     {
-        *sent_bytes = (uint32_t) res;
+        *o_sent_bytes = (uint32_t)res;
     }
 
     return res == size;
@@ -142,9 +143,9 @@ static bool SendHelperFrag(int sockfd, uint8_t *buffer, uint32_t size, uint32_t 
 
     for (i = 0; i < num_of_frags; ++i)
     {
-        status = SendHelper(sockfd, frags[i], MAX_PACKET_SIZE + sizeof(hdr_t), &temp_sent_bytes );
+        status = SendHelper(sockfd, frags[i], MAX_PACKET_SIZE + sizeof(hdr_t), &temp_sent_bytes);
 
-        if (status == false)
+        if (!status)
         {
             break;
         }
@@ -538,6 +539,13 @@ static bool HandleUpperRequest(__attribute__((unused)) int sockfd, const uint8_t
 
     GET_FROM_BUFFER_SIZE(payload, &path, pathSize);
     GET_FROM_BUFFER(payload, fileSize);
+
+    if (fileSize >
+        packet_size - sizeof(fileSize) - sizeof(pathSize) - pathSize)
+    {
+        REPORT();
+        return false;
+    }
 
     /* NULL Terminate the path just in case */
     path[pathSize] = '\0';

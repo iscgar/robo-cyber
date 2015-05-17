@@ -159,8 +159,8 @@ class DualShock3(object):
                 joy.init()
 
                 if "PLAYSTATION(R)3 Controller" in joy.get_name() and \
-                        joy.joystick.get_numaxes() == 27 and \
-                        joy.joystick.get_numbuttons() == 19:
+                        joy.get_numaxes() == 29 and \
+                        joy.get_numbuttons() == 17:
                     DualShock3._ps3 = joy
                     break
 
@@ -231,9 +231,11 @@ if __name__ == "__main__":
             # Calculate wheels turn
             if (abs_turn > 0.1):
                 if (turn > 0):
-                    left = 0 if in_place_turn == 0 else abs_turn * (-right)
+                    right = right - abs_turn * left if in_place_turn == 0 \
+                        else abs_turn * (-left)
                 else:
-                    right = 0 if in_place_turn == 0 else abs_turn * (-left)
+                    left = left - abs_turn * right if in_place_turn == 0 \
+                        else abs_turn * (-right)
 
         return right, left, arm
 

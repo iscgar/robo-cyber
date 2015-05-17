@@ -12,8 +12,8 @@
 #define MAX_PACKET_SIZE 64 /* 823 */
 #define TEMP_STR_SIZE   32
 
-#define BLUE_PIN 7
-#define ORANGE_PIN 8
+#define BLUE_PIN 3
+#define ORANGE_PIN 2
 #define RED_PIN 0
 
 #define NORMAL_BLINK 10000
