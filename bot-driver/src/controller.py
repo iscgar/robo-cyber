@@ -212,8 +212,8 @@ if __name__ == "__main__":
             arm = SPEED_MAX
 
         max_speed = ctrl.digital_buttons[ctrl.Digital.B_UP] | \
-            ctrl.digital_buttons[ctrl.Digital.B_RIGHT] | \
             ctrl.digital_buttons[ctrl.Digital.B_DOWN] | \
+            ctrl.digital_buttons[ctrl.Digital.B_RIGHT] | \
             ctrl.digital_buttons[ctrl.Digital.B_LEFT]
 
         right = left = 0
@@ -233,12 +233,19 @@ if __name__ == "__main__":
                 right = -SPEED_MAX
         else:
             # Use joystick to calculate movements
-            right = left = ctrl.analog_axes[ctrl.Analog.JOY_LEFT_Y] * -SPEED_MAX
+            y_axis = ctrl.analog_axes[ctrl.Analog.JOY_RIGHT_Y] + 0.14
 
-            turn = ctrl.analog_axes[ctrl.Analog.JOY_LEFT_X]
+            if y_axis < 0:
+                y_axis *= 0.86
+            else:
+                y_axis *= 1.14
+
+            right = left = y_axis * -SPEED_MAX
+
+            turn = ctrl.analog_axes[ctrl.Analog.JOY_RIGHT_X]
             abs_turn = abs(turn)
 
-            if abs(right) < 0.1 and abs_turn > 0:
+            if abs(y_axis) <= 0.45 and abs_turn > 0:
                 if (turn > 0):
                     left = abs_turn * SPEED_MAX
                 else:
