@@ -238,7 +238,7 @@ if __name__ == "__main__":
             turn = ctrl.analog_axes[ctrl.Analog.JOY_LEFT_X]
             abs_turn = abs(turn)
 
-            if right == 0 and abs_turn > 0:
+            if abs(right) < 0.1 and abs_turn > 0:
                 if (turn > 0):
                     left = abs_turn * SPEED_MAX
                 else:
