@@ -203,12 +203,12 @@ if __name__ == "__main__":
     def get_speeds(ctrl):
         arm = 0
 
-        # Set arm motor speed only if a B_CROSS xor B_TRIANGLE is pressed
-        if ctrl.digital_buttons[ctrl.Digital.B_CROSS] != 0 and \
-                ctrl.digital_buttons[ctrl.Digital.B_TRIANGLE] == 0:
+        # Set arm motor speed only if a B_L1 xor B_R1 is pressed
+        if ctrl.digital_buttons[ctrl.Digital.B_L1] != 0 and \
+                ctrl.digital_buttons[ctrl.Digital.B_R1] == 0:
             arm = -SPEED_MAX
-        elif ctrl.digital_buttons[ctrl.Digital.B_TRIANGLE] != 0 and \
-                ctrl.digital_buttons[ctrl.Digital.B_CROSS] == 0:
+        elif ctrl.digital_buttons[ctrl.Digital.B_R1] != 0 and \
+                ctrl.digital_buttons[ctrl.Digital.B_L1] == 0:
             arm = SPEED_MAX
 
         max_speed = ctrl.digital_buttons[ctrl.Digital.B_UP] | \
