@@ -203,39 +203,47 @@ if __name__ == "__main__":
     def get_speeds(ctrl):
         arm = 0
 
-        # Set arm motor speed only if a B_SQUARE xor B_CIRCLE is pressed
-        if ctrl.digital_buttons[ctrl.Digital.B_SQUARE] != 0 and \
-                ctrl.digital_buttons[ctrl.Digital.B_CIRCLE] == 0:
-            arm = SPEED_MAX
-        elif ctrl.digital_buttons[ctrl.Digital.B_CIRCLE] != 0 and \
-                ctrl.digital_buttons[ctrl.Digital.B_SQUARE] == 0:
+        # Set arm motor speed only if a B_CROSS xor B_TRIANGLE is pressed
+        if ctrl.digital_buttons[ctrl.Digital.B_CROSS] != 0 and \
+                ctrl.digital_buttons[ctrl.Digital.B_TRIANGLE] == 0:
             arm = -SPEED_MAX
+        elif ctrl.digital_buttons[ctrl.Digital.B_TRIANGLE] != 0 and \
+                ctrl.digital_buttons[ctrl.Digital.B_CROSS] == 0:
+            arm = SPEED_MAX
 
-        forward = ctrl.analog_axes[ctrl.Analog.B_R2]
-        back = ctrl.analog_axes[ctrl.Analog.B_L2]
+        max_speed = ctrl.digital_buttons[ctrl.Digital.B_UP] | \
+            ctrl.digital_buttons[ctrl.Digital.B_RIGHT] | \
+            ctrl.digital_buttons[ctrl.Digital.B_DOWN] | \
+            ctrl.digital_buttons[ctrl.Digital.B_LEFT]
 
-        # Normalize mutual press
-        wheels_speed = (forward - back) * SPEED_MAX
-        right = left = wheels_speed
+        right = left = 0
 
-        # Ignore turn values when not in movement
-        if wheels_speed != 0:
-            # Get turn parameters from controller
-            turn = ctrl.analog_axes[ctrl.Analog.JOY_RIGHT_X]
+        # Check if max speed buttons were pressed
+        if max_speed != 0:
+            if ctrl.digital_buttons[ctrl.Digital.B_UP]:
+                right = left = SPEED_MAX
+            elif ctrl.digital_buttons[ctrl.Digital.B_DOWN]:
+                right = left = -SPEED_MAX
+            # In-place turn
+            elif ctrl.digital_buttons[ctrl.Digital.B_LEFT]:
+                right = SPEED_MAX
+                left = -SPEED_MAX
+            elif ctrl.digital_buttons[ctrl.Digital.B_RIGHT]:
+                left = SPEED_MAX
+                right = -SPEED_MAX
+        else:
+            # Use joystick to calculate movements
+            right = left = ctrl.analog_axes[ctrl.Analog.JOY_LEFT_Y] * SPEED_MAX
+
+            turn = ctrl.analog_axes[ctrl.Analog.JOY_LEFT_X]
             abs_turn = abs(turn)
-            in_place_turn = ctrl.digital_buttons[ctrl.Digital.B_UP] | \
-                ctrl.digital_buttons[ctrl.Digital.B_RIGHT] | \
-                ctrl.digital_buttons[ctrl.Digital.B_DOWN] | \
-                ctrl.digital_buttons[ctrl.Digital.B_LEFT]
 
-            # Calculate wheels turn
+            # Account for turn only if bigger than threshold
             if (abs_turn > 0.1):
                 if (turn > 0):
-                    right = right - abs_turn * left if in_place_turn == 0 \
-                        else abs_turn * (-left)
+                    right -= (abs_turn * left)
                 else:
-                    left = left - abs_turn * right if in_place_turn == 0 \
-                        else abs_turn * (-right)
+                    left -= (abs_turn * right)
 
         return right, left, arm
 
