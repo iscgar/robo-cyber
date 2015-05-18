@@ -232,10 +232,15 @@ if __name__ == "__main__":
                 left = SPEED_MAX
                 right = -SPEED_MAX
         else:
-            # Use joystick to calculate movements
-            y_axis = ctrl.analog_axes[ctrl.Analog.JOY_RIGHT_Y] + 0.14
+            # Use joystick to calculate movements (needs adjustments)
+            y_axis = ctrl.analog_axes[ctrl.Analog.JOY_RIGHT_Y] - 0.1
 
-            y_axis *= 1 / (1 + (y_axis / abs(y_axis) * 0.14))
+            y_axis *= 1 / (1 - (y_axis / abs(y_axis) * 0.1))
+
+	    if y_axis > 0.99:
+		y_axis = 1
+	    elif y_axis < -0.99:
+		y_axis = -1
 
             right = left = y_axis * -SPEED_MAX
 
@@ -254,7 +259,7 @@ if __name__ == "__main__":
                 else:
                     left -= (abs_turn * right)
 
-        return right, left, arm
+        return int(right), int(left), arm
 
     try:
         controller.init()
