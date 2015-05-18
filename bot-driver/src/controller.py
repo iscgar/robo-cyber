@@ -235,10 +235,7 @@ if __name__ == "__main__":
             # Use joystick to calculate movements
             y_axis = ctrl.analog_axes[ctrl.Analog.JOY_RIGHT_Y] + 0.14
 
-            if y_axis < 0:
-                y_axis *= 0.86
-            else:
-                y_axis *= 1.14
+            y_axis *= 1 / (1 + (y_axis / abs(y_axis) * 0.14))
 
             right = left = y_axis * -SPEED_MAX
 
