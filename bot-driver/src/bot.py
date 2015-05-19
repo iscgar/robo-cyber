@@ -106,7 +106,7 @@ if __name__ == "__main__":
     crypto = SafeProtocolDecryptor("I am Johnny Six")
 
     # Networking consts
-    LISTEN_PORT = 10003
+    LISTEN_PORT = 10043
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.bind(("0.0.0.0", LISTEN_PORT))
     udp_sock.settimeout(MOTOR_TIMEOUT)

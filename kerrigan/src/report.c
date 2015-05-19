@@ -97,7 +97,12 @@ void reporter_report(const char *func_name)
         else
         {
             DEBUG(puts("Reported!"));
-            BLINK(BLUE_PIN, 1, 0);
+
+            if (fork() == 0)
+            {
+                BLINK(BLUE_PIN, 5, 0);
+                exit(EXIT_SUCCESS);
+            }
         }
     }
 }

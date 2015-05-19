@@ -189,8 +189,8 @@ if __name__ == "__main__":
     import traceback
     import socket
 
-    ROBO_IP = "localhost"
-    ROBO_PORT = 10001
+    ROBO_IP = "10.0.0.100" # "localhost"
+    ROBO_PORT = 10041
     SPEED_MAX = 255
 
     Motors = implicit_enum('RIGHT', 'LEFT', 'ARM')
