@@ -137,6 +137,7 @@ static bool SendHelperFrag(int sockfd, uint8_t *buffer, uint32_t size, uint32_t 
 
     if (frags == NULL)
     {
+        DEBUG(printf("frags is NULL\r\n"));
         REPORT();
         return false;
     }
@@ -232,6 +233,7 @@ static bool HandleKARequest(int sockfd, const uint8_t *packet, uint32_t packet_s
 
     if (size > packet_size - sizeof(size))
     {
+        DEBUG(printf("size is %d, expected at least %d\r\n", size, packet_size - sizeof(size)));
         REPORT();
         return false;
     }

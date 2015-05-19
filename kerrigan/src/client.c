@@ -166,6 +166,8 @@ int start_app(int argc, const char *argv[])
                 {
                     break;
                 }
+
+                BLINK(RED_PIN, 5, 0);
             }
 
             if (WIFSIGNALED(status))
